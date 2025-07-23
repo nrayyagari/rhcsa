@@ -385,6 +385,64 @@ LISTEN 0      511    0.0.0.0:80        0.0.0.0:*         nginx
 
 **Real-world Usage:** Use `sudo ss -tulnp` for comprehensive socket monitoring and troubleshooting network services.
 
+## NAT Behavior & Client IP Tracking
+
+### Q: Why does `ss -4` show connections from default gateway IP instead of real client IPs?
+**A:** NAT (Network Address Translation) replaces all external client IPs with the gateway's IP address.
+
+**Network Flow:**
+```
+External Client (1.2.3.4) → Gateway (172.16.0.1) → Server sees (172.16.0.1:random_port)
+External Client (5.6.7.8) → Gateway (172.16.0.1) → Server sees (172.16.0.1:different_port)
+```
+
+**WHY:** Gateway performs SNAT (Source NAT) - all outbound connections appear to originate from gateway IP.
+
+### Q: How can I track real client IPs hitting my nginx server?
+**A:** Check application logs, not network socket information - `ss` shows network layer, real IPs are at application layer.
+
+**Solution:**
+```bash
+# Monitor nginx access logs for real client IPs
+tail -f /var/log/nginx/access.log
+```
+
+**Log Format Shows:**
+- **First IP:** Gateway IP (172.16.0.1) - what `ss` sees
+- **Last field:** Real client IP in quotes - what you need
+
+**Example Log Entry:**
+```
+172.16.0.1 - - [23/Jul/2025:11:40:58 +0000] "GET / HTTP/1.1" 200 7620 "..." "Mozilla/5.0..." "49.37.155.30"
+```
+
+**Real Client IP:** 49.37.155.30 (shown at end of log line)
+
+### Q: Why do multiple external clients all show the same gateway IP in `ss` output?
+**A:** This is expected NAT behavior - gateway masks all external source IPs.
+
+**Gateway Functions:**
+- **NAT Translation:** Replaces client IPs with gateway IP
+- **Port Mapping:** Uses different source ports to distinguish connections
+- **State Tracking:** Maintains connection mapping tables
+
+**To See Real IPs:**
+1. **Application logs** (nginx, apache, etc.)
+2. **Gateway/firewall logs**
+3. **X-Forwarded-For headers** (if HTTP)
+4. **Disable NAT** (requires public IP range)
+
+### Q: What's the difference between `ss` output and nginx logs for tracking clients?
+**A:**
+- **`ss` command:** Shows network layer connections (post-NAT)
+- **nginx logs:** Shows application layer requests (pre-NAT with real IPs)
+
+**Use Cases:**
+- **`ss`:** Network troubleshooting, connection states, port usage
+- **nginx logs:** Client tracking, analytics, security monitoring
+
+**Real-world Impact:** For client IP tracking and security analysis, always use application logs, not network socket tools.
+
 ---
 
 ## First Principles Summary
