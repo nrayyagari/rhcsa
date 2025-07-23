@@ -578,6 +578,191 @@ kill -USR1 rsyslog      # Flush log buffers
 
 ---
 
+## System Performance Tuning with tuned
+
+### Q65: What is tuned and why is it used in RHEL?
+**A:** **tuned** is Red Hat's **system tuning daemon** that automatically optimizes system performance based on predefined profiles:
+- **Purpose**: One-command application of dozens of kernel optimizations
+- **Automatic tuning**: Adjusts CPU governor, I/O scheduler, memory settings dynamically
+- **Profile-based**: Different optimization sets for different workload types
+- **Production standard**: Heavily used in enterprise RHEL deployments
+
+### Q66: What are the most common tuned profiles and their use cases?
+**A:** **General profiles**:
+- **`balanced`**: Default, balanced performance/power consumption
+- **`performance`**: Maximum performance for servers
+- **`powersave`**: Maximum power saving for laptops
+
+**Server workload profiles**:
+- **`throughput-performance`**: High I/O throughput servers (databases)
+- **`latency-performance`**: Low latency applications (real-time, trading)
+- **`network-throughput`**: Network-intensive workloads (web servers)
+- **`network-latency`**: Network low-latency requirements
+
+**Virtualization profiles**:
+- **`virtual-guest`**: VM guest optimization
+- **`virtual-host`**: Hypervisor host optimization
+
+### Q67: What actually happens under the hood when you apply a tuned profile?
+**A:** tuned modifies **kernel parameters and system files** automatically. 
+
+**Example - `throughput-performance` profile changes**:
+```bash
+# Before
+CPU Governor: powersave        # CPU runs slower to save power
+I/O Scheduler: cfq            # Fair queuing causes delays  
+Swappiness: 60                # Aggressive swapping to disk
+
+# After tuned-adm profile throughput-performance  
+CPU Governor: performance     # CPU always runs at max speed
+I/O Scheduler: deadline       # Better for database I/O
+Swappiness: 10               # Keep data in RAM longer
+```
+
+### Q68: How do you work with tuned profiles in practice?
+**A:** **Basic commands**:
+```bash
+tuned-adm active              # Check current profile
+tuned-adm list                # List available profiles
+tuned-adm profile balanced    # Apply a profile
+tuned-adm off                 # Disable tuning
+```
+
+**Real-world workflow**:
+```bash
+# Database server optimization
+tuned-adm profile throughput-performance
+
+# Web server optimization  
+tuned-adm profile network-throughput
+
+# VM guest optimization
+tuned-adm profile virtual-guest
+```
+
+### Q69: What specific system changes does tuned make for different profiles?
+**A:** **CPU changes**:
+- **Governor**: `performance` (max speed) vs `powersave` (variable speed)
+- **Frequency scaling**: Min/max CPU frequencies
+- **C-states**: CPU sleep state management
+
+**I/O changes**:
+- **Scheduler**: `deadline` (low latency) vs `cfq` (fairness) vs `noop` (minimal overhead)
+- **Queue depths**: Request queue sizes
+- **Read-ahead**: Disk read-ahead buffer sizes
+
+**Memory changes**:
+- **vm.swappiness**: When to swap to disk (10 vs 60)
+- **Transparent hugepages**: Large memory pages for performance
+- **dirty_ratio**: When to flush dirty pages to disk
+
+**Network changes**:
+- **TCP buffer sizes**: Send/receive buffer optimization
+- **Network queue lengths**: Interface queue management
+- **Interrupt handling**: CPU affinity for network interrupts
+
+### Q70: How does tuned compare across different Linux distributions?
+**A:** **RHEL/CentOS/Fedora**: Full tuned support (Red Hat developed)
+
+**Ubuntu/Debian**: **No direct equivalent**, alternatives:
+- **`cpufrequtils`**: Basic CPU governor control
+- **`power-profiles-daemon`**: Limited power profile switching
+- **Manual sysctl tuning**: Administrators manually optimize kernel parameters
+
+**Other distributions**:
+- **SUSE**: `sapconf` for SAP-specific tuning
+- **Arch**: `cpupower` + manual tuning
+- **Enterprise advantage**: tuned gives RHEL "production-ready" optimization out of the box
+
+### Q71: When should you use specific tuned profiles in production?
+**A:** **Database servers** (PostgreSQL, MySQL, Oracle):
+```bash
+tuned-adm profile throughput-performance
+# Result: 20-40% I/O performance improvement
+```
+
+**Web servers** (Apache, Nginx):
+```bash
+tuned-adm profile network-throughput  
+# Result: 15-30% network throughput increase
+```
+
+**Real-time applications** (trading, audio/video):
+```bash
+tuned-adm profile latency-performance
+# Result: Consistent low-latency response times
+```
+
+**Virtual machine hosts**:
+```bash
+tuned-adm profile virtual-host
+# Result: Better VM resource allocation and performance
+```
+
+**Laptops/power-conscious systems**:
+```bash
+tuned-adm profile powersave
+# Result: Extended battery life
+```
+
+### Q72: How can you verify what tuned actually changed on your system?
+**A:** **Check specific settings changed**:
+```bash
+# CPU governor
+cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+
+# I/O scheduler  
+cat /sys/block/sda/queue/scheduler
+
+# Memory settings
+cat /proc/sys/vm/swappiness
+cat /sys/kernel/mm/transparent_hugepage/enabled
+
+# Network buffers
+cat /proc/sys/net/core/rmem_max
+cat /proc/sys/net/core/wmem_max
+```
+
+**Before/after comparison workflow**:
+```bash
+# 1. Capture current state
+echo "Before: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+
+# 2. Apply profile
+tuned-adm profile throughput-performance
+
+# 3. Verify changes
+echo "After: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
+```
+
+### Q73: What is the key advantage of tuned over manual system tuning?
+**A:** **Automation of expert knowledge**:
+
+**Manual approach** (what Ubuntu admins do):
+```bash
+# Dozens of commands needed
+echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+echo deadline > /sys/block/sda/queue/scheduler
+sysctl -w vm.swappiness=10
+sysctl -w vm.dirty_ratio=40
+# ... 20+ more parameter changes
+```
+
+**tuned approach**:
+```bash
+# One command does it all
+tuned-adm profile throughput-performance
+```
+
+**Benefits**:
+- **Proven combinations**: Parameters that work well together
+- **No expertise required**: Apply expert-level tuning instantly  
+- **Consistency**: Same optimizations across similar systems
+- **Rollback capability**: Easy to switch profiles or disable
+- **Dynamic adjustment**: Responds to system changes automatically
+
+---
+
 ## References
 
 - [Linux Crash Course - The ps Command](https://www.youtube.com/watch?v=wYwGNgsfN3I) - Comprehensive video tutorial covering ps command fundamentals, options, and practical usage
