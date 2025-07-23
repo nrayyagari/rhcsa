@@ -397,3 +397,11 @@ LISTEN 0      511    0.0.0.0:80        0.0.0.0:*         nginx
 5. **Abstraction:** Cloud virtualizes physical networking concepts
 
 **Business Impact:** Understanding these fundamentals enables proper cloud architecture, troubleshooting network issues, and designing scalable distributed systems.
+
+---
+
+## Reference Links
+
+- [7 Great Network Commands - Red Hat Blog](https://www.redhat.com/en/blog/7-great-network-commands)
+- [Top 20 Linux Network Commands - RedSwitches](https://www.redswitches.com/blog/top-20-linux-network-commands/)
+- [Rocky Linux Playground](https://labs.iximiuz.com/playgrounds/rockylinux/) - Practice environment for hands-on learning
