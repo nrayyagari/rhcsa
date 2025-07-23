@@ -443,6 +443,108 @@ tail -f /var/log/nginx/access.log
 
 **Real-world Impact:** For client IP tracking and security analysis, always use application logs, not network socket tools.
 
+## NetworkManager vs systemd-networkd
+
+### Q: Is nmcli specific to Red Hat-based distributions?
+**A:** No - NetworkManager and `nmcli` are cross-distribution tools used by RHEL, Ubuntu, SUSE, and others.
+
+**Distribution Adoption:**
+- **RHEL/CentOS:** Default since RHEL 7
+- **Ubuntu:** Default since 17.10
+- **SUSE:** Default option
+- **Debian:** Available, often default in desktop
+
+### Q: What's the fundamental difference between NetworkManager and systemd-networkd?
+**A:** 
+- **NetworkManager:** Smart daemon with dynamic network management
+- **systemd-networkd:** Simple service applying static configuration files
+
+**Architecture Comparison:**
+```
+NetworkManager: "I'll handle everything automatically"
+systemd-networkd: "Tell me what you want, I'll set it up"
+```
+
+**Key Differences:**
+- **Management:** Dynamic vs declarative
+- **State:** Memory-based vs file-based
+- **Interface:** D-Bus API vs config files
+- **Complexity:** Full-featured vs minimal
+
+### Q: Which should enterprises use in production?
+**A:** **NetworkManager for most enterprise environments** - it's the Enterprise Linux standard.
+
+**Enterprise Reality (2024-2025):**
+- **Traditional Servers:** NetworkManager dominates
+- **Container/Cloud-Native:** systemd-networkd growing
+- **Mixed Environments:** NetworkManager preferred
+
+**WHY NetworkManager for Enterprise:**
+- Consistent configuration across server/desktop
+- Comprehensive feature set (VPN, 802.1X, bonding)
+- Dynamic network handling
+- Mature tooling and support
+
+### Q: When would you choose systemd-networkd over NetworkManager?
+**A:** For specialized use cases requiring minimal overhead:
+
+**systemd-networkd Best For:**
+- Container environments
+- Embedded systems
+- Static network configurations
+- Boot time critical applications
+- Simple DHCP/static IP setups
+
+**Examples:**
+- Kubernetes nodes (like Datadog's infrastructure)
+- IoT devices
+- Container base images
+- Systems with fixed network topology
+
+### Q: Can both NetworkManager and systemd-networkd run simultaneously?
+**A:** **No** - they're mutually exclusive and will conflict.
+
+**Check which is active:**
+```bash
+systemctl status NetworkManager
+systemctl status systemd-networkd
+```
+
+**Switch between them:**
+```bash
+# Disable NetworkManager, enable systemd-networkd
+sudo systemctl disable NetworkManager
+sudo systemctl enable systemd-networkd
+
+# Or vice versa
+sudo systemctl disable systemd-networkd  
+sudo systemctl enable NetworkManager
+```
+
+### Q: How do the configuration approaches differ?
+**A:**
+
+**NetworkManager (Dynamic):**
+```bash
+# Interactive management
+nmcli connection add type ethernet con-name eth0
+nmcli connection modify eth0 ipv4.addresses 192.168.1.100/24
+nmcli connection up eth0  # Immediate activation
+```
+
+**systemd-networkd (Declarative):**
+```bash
+# File-based configuration
+cat > /etc/systemd/network/eth0.network << EOF
+[Network]
+Address=192.168.1.100/24
+Gateway=192.168.1.1
+EOF
+systemctl restart systemd-networkd  # Apply changes
+```
+
+**Real-world Impact:** NetworkManager enables runtime network changes without service restarts, while systemd-networkd requires configuration file edits and service restarts for changes.
+
 ---
 
 ## First Principles Summary
