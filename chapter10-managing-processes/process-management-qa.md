@@ -294,6 +294,290 @@ TasksMax=100
 
 ---
 
+## Process Priority and Niceness
+
+### Q39: What's the relationship between Priority (PR) and Nice Value (NI)?
+**A:** The formula is: **PR = 20 + NI** (in top display)
+- **PR (Priority)**: Kernel's internal priority (lower number = higher priority)
+- **NI (Nice Value)**: User-adjustable offset (-20 to +19)
+- **Default**: NI = 0, so PR = 20
+
+### Q40: Why do we need both priority and niceness concepts?
+**A:** **Separation of concerns**:
+- **Priority (PR)**: What the kernel scheduler actually uses internally
+- **Niceness (NI)**: Human-friendly interface for adjusting process behavior
+- **Design philosophy**: "Nice people finish last" - positive nice = lower priority
+
+### Q41: How do you remember the niceness concept?
+**A:** **Memory trick**: "Nice = Polite = Gives Way = Lower Priority"
+- **High nice (+19)**: Very polite person, steps aside for others = **Low priority**
+- **Low nice (-20)**: Rude person, pushes to front = **High priority**
+- **Rule**: The nicer (more positive) the number, the more the process yields CPU
+
+### Q42: What are real-world scenarios for using nice/renice?
+**A:** Common use cases:
+- **Database backups**: `nice +15 pg_dump` - Don't slow down web traffic
+- **Video processing**: `nice +10 ffmpeg` - Keep system responsive during encoding
+- **System emergency**: `renice -10 $(pgrep nginx)` - Boost web server priority
+- **Code compilation**: `nice +5 make -j8` - Compile without freezing desktop
+
+### Q43: When does niceness NOT help?
+**A:** Niceness is ineffective for:
+- **I/O bound processes** - Disk/network bottlenecks, not CPU competition
+- **Low system load** - No CPU competition exists
+- **Memory-intensive apps** - Nice doesn't control RAM usage
+- **Real-time requirements** - Use `chrt` for real-time scheduling instead
+
+### Q44: What happens during CPU resource contention?
+**A:** **Without nice adjustment**: All processes compete equally, everything slows down
+**With nice adjustment**: Critical processes get larger CPU time slices, background tasks get smaller slices
+- **Total CPU stays 100%**, but allocation changes based on priority
+- **High priority** processes become more responsive
+- **Low priority** processes run slower but don't block critical functions
+
+---
+
+## Signals and Process Communication
+
+### Q45: What is the core problem that signals solve?
+**A:** Signals provide **inter-process communication** for process control:
+- Stop runaway processes
+- Gracefully shut down services  
+- Reload configuration without restart
+- Handle system events (logout, shutdown)
+- Enable cooperative process management
+
+### Q46: What are the main categories of signals?
+**A:** **Termination Signals**:
+- `SIGTERM` (15) - "Please exit cleanly" (save files, close connections)
+- `SIGKILL` (9) - "Die immediately" (cannot be caught or ignored)
+- `SIGQUIT` (3) - "Quit with core dump" (for debugging)
+
+**Control Signals**:
+- `SIGSTOP` (19) - Pause process (like Ctrl+Z)
+- `SIGCONT` (18) - Resume paused process
+- `SIGHUP` (1) - "Terminal disconnected" or "reload config"
+
+**User Interaction**:
+- `SIGINT` (2) - Interrupt (Ctrl+C)
+- `SIGTSTP` (20) - Terminal stop (Ctrl+Z)
+
+### Q47: Why is the signal design considered elegant?
+**A:** **Asynchronous Communication**: 
+- Signals don't block the sender
+- Process handles signal when convenient
+- **Process Choice**: Can handle, ignore (if allowed), or use default behavior
+- **Cooperative**: Processes participate in their own lifecycle management
+
+### Q48: What are practical examples of signal usage?
+**A:** **Graceful Service Management**:
+```bash
+kill -HUP $(pgrep nginx)    # Reload config without downtime
+kill -USR1 process_pid      # Trigger debug info dump
+```
+
+**System Shutdown Sequence**:
+1. Send SIGTERM to all processes (please exit)
+2. Wait 10 seconds
+3. Send SIGKILL to remaining processes (force exit)
+
+**Process Debugging**:
+- `kill -USR1/USR2` for custom debugging actions
+- Better than killing and restarting for investigation
+
+### Q49: What's the difference between SIGTERM and SIGKILL?
+**A:** 
+- **SIGTERM (15)**: Polite request to terminate, process can clean up (save files, close connections, custom handlers)
+- **SIGKILL (9)**: Immediate termination by kernel, cannot be caught, ignored, or handled
+- **Best practice**: Always try SIGTERM first, use SIGKILL only as last resort
+
+### Q50: How do signals enable zero-downtime service management?
+**A:** Many services respond to specific signals for operational tasks:
+- **SIGHUP**: Reload configuration files without stopping service
+- **SIGUSR1/USR2**: Application-specific functions (log rotation, status dumps)
+- **Avoids**: stop → edit config → start cycle that causes service interruption
+- **Result**: Configuration changes applied instantly without dropping connections
+
+---
+
+## Practical Commands and Examples
+
+### Q51: How do you create a CPU stress test with lower priority?
+**A:** 
+```bash
+nice -n 5 dd if=/dev/zero of=/dev/null &
+```
+This creates infinite CPU load at lower priority (+5 niceness) to test system behavior without freezing the system.
+
+### Q52: What's the complete workflow for emergency process priority adjustment?
+**A:**
+```bash
+# Identify problem processes
+top -o %CPU
+
+# Boost critical service priority (requires root)
+sudo renice -10 $(pgrep nginx)
+sudo renice -10 $(pgrep postgres)
+
+# Lower background task priority
+sudo renice +15 $(pgrep backup)
+sudo renice +19 $(pgrep logrotate)
+
+# Monitor results
+systemd-cgtop
+```
+
+---
+
+## Zombie Processes and Process States
+
+### Q53: What is a zombie process?
+**A:** A **zombie** (defunct) is a process that has **finished executing** but still has an entry in the process table because its **parent hasn't read its exit status** yet.
+- **Status**: Shows as 'Z' in ps output or `<defunct>` in command field
+- **Memory usage**: Zero (0 RSS, 0 VSZ) - process is dead
+- **Purpose**: Holds exit status until parent calls wait()
+
+### Q54: How do you identify zombie processes?
+**A:** Multiple detection methods:
+```bash
+ps aux | grep -i defunct                    # Look for <defunct>
+ps aux | awk '$8 ~ /^Z/ { print $2 }'      # Status 'Z' processes
+top                                         # Shows zombie count in summary
+ps -eo pid,ppid,state,comm | grep " Z "    # State column 'Z'
+```
+
+### Q55: Why do zombie processes occur?
+**A:** **Bad parent programming** - parent process doesn't clean up after child:
+- **Child completes** execution and exits
+- **Parent continues** without calling wait() to read exit status
+- **Child becomes zombie** until parent reads its status
+- **Common causes**: Scripts with background jobs, poorly written daemons
+
+### Q56: How do you eliminate zombie processes?
+**A:** **Method 1**: Kill the parent process (most effective)
+```bash
+ps -eo pid,ppid,state,comm | grep " Z "    # Find zombie's parent
+kill -TERM parent_pid                       # Kill parent
+# systemd adopts zombie → automatically cleans it up
+```
+
+**Method 2**: Signal parent to clean up
+```bash
+kill -CHLD parent_pid    # Send child signal to parent
+```
+
+**Method 3**: Restart the service
+```bash
+systemctl restart service_name
+```
+
+### Q57: Are zombie processes harmful?
+**A:** **Usually NOT harmful** because:
+- **No resource usage**: 0 memory, 0 CPU
+- **Only consume**: One PID entry in process table
+- **Limited impact**: Process table holds ~32,768 entries
+
+**Becomes problematic** when thousands exist (PID exhaustion):
+```bash
+# Zombie bomb scenario
+ps aux | grep defunct | wc -l
+# 15000 zombies! - Cannot create new processes
+```
+
+---
+
+## Process Termination Behavior Differences
+
+### Q58: How does process termination behavior differ between older Linux and RHEL 9?
+**A:** **Older Unix/Linux**: Killing parent → all children die with parent
+**RHEL 9**: Killing parent → children become orphans (adopted by systemd)
+
+**Design philosophy change**:
+- **Old**: "Family death" - aggressive cascading termination
+- **New**: "Individual death" - only targeted process dies, more explicit control
+
+### Q59: Why does killing nginx master kill all workers in RHEL 9?
+**A:** This is **application-specific coordination**, not system behavior:
+- **nginx master** handles SIGTERM by actively signaling all workers to terminate
+- **Coordinated shutdown**: Master waits for workers to exit, then exits itself
+- **This is good design**: Ensures graceful service shutdown and no orphaned workers
+
+**Process tree example**:
+```bash
+nginx: master (PID 1234) ← kill this
+├── nginx: worker (1235) ← master tells it to exit  
+├── nginx: worker (1236) ← master tells it to exit
+└── nginx: worker (1237) ← master tells it to exit
+```
+
+---
+
+## kill vs killall Command Comparison
+
+### Q60: When should you use kill vs killall?
+**A:** **Use `kill`** for:
+- **Specific PID targeting**: `kill 1234`
+- **Safety/precision**: Know exactly what you're killing
+- **Different signals per process**: `kill -HUP 1234; kill -TERM 5678`
+
+**Use `killall`** for:
+- **Multiple instances**: `killall firefox` (all firefox processes)
+- **Name-based killing**: Don't need to find PIDs first
+- **Bulk cleanup**: `killall chrome` (cleanup all instances)
+
+### Q61: What are the risks of using killall?
+**A:** **Dangerous patterns**:
+```bash
+killall python     # Might kill system scripts!
+killall bash       # Could kill your own shell!
+killall java       # Might kill multiple applications
+```
+
+**Safer alternatives**:
+```bash
+pkill -f "specific_script.py"    # Pattern matching
+pgrep firefox | xargs kill       # Two-step verification
+systemctl stop service_name      # Proper service management
+```
+
+### Q62: Why is the "kill" command name misleading?
+**A:** **Historical naming problem**: "kill" actually **sends signals**, not just kills:
+```bash
+kill -HUP nginx     # "Please reload config" (not killing!)
+kill -STOP job      # "Pause yourself" (not killing!)
+kill -USR1 apache   # "Rotate logs" (not killing!)
+```
+
+**Better names would be**: `signal`, `notify`, `message` - but too late to change due to backwards compatibility.
+
+---
+
+## USR1/USR2 Signal Applications
+
+### Q63: What do USR1 and USR2 signals actually mean?
+**A:** **USR1/USR2 = "User-defined signals"** - blank signals that applications can program for **any purpose**:
+- **No standard meaning** across applications
+- **Each application** documents what their USR1/USR2 do
+- **Common misconception**: USR1 is "only for log rotation" (false!)
+
+### Q64: How do different applications use USR1 differently?
+**A:** **Web servers** (coincidentally similar):
+```bash
+kill -USR1 nginx        # Reopen log files
+kill -USR1 apache       # Reopen log files
+```
+
+**Other applications** (completely different):
+```bash
+kill -USR1 postgresql   # Dump database statistics  
+kill -USR1 redis        # Save database to disk
+kill -USR1 rsyslog      # Flush log buffers
+```
+
+**Rule**: Always check application documentation - never assume USR1 meaning!
+
+---
+
 ## References
 
 - [Linux Crash Course - The ps Command](https://www.youtube.com/watch?v=wYwGNgsfN3I) - Comprehensive video tutorial covering ps command fundamentals, options, and practical usage
