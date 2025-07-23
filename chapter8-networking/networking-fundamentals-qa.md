@@ -244,6 +244,147 @@ default via 172.16.0.1 dev eth0
 
 **Real-world Impact:** Cloud separation enables independent scaling and better reliability than monolithic appliances.
 
+## Socket Statistics & Monitoring
+
+### Q: Difference between `ss` and `netstat` utilities?
+**A:**
+- **netstat:** Legacy BSD tool (1980s) - slow, reads `/proc/net/*` files
+- **ss:** Modern replacement from iproute2 - fast, queries kernel via netlink
+
+**Performance Difference:**
+- **netstat:** Slow on busy systems with many connections
+- **ss:** Fast execution, especially with thousands of connections
+
+**Real-world Impact:** On high-traffic servers, `ss` completes in seconds while `netstat` may take minutes.
+
+### Q: What does `ss` stand for and when to use it?
+**A:** **Socket Statistics** - displays detailed network socket information.
+
+**When to use ss:**
+- Check which services are listening on ports
+- Troubleshoot network connectivity issues  
+- Monitor active connections
+- Identify processes using specific ports
+- Security audits for unexpected services
+
+### Q: Why don't I see process names in `ss -tulnp`?
+**A:** Need **root privileges** to see process information for all sockets.
+
+**Without sudo:** Empty Process column
+**With sudo:** Shows process names, PIDs, file descriptors
+
+**Example:**
+```bash
+# Regular user - no process info
+ss -tulnp
+
+# Root user - shows process details
+sudo ss -tulnp
+```
+
+### Q: What's the difference between Local Address and Peer Address?
+**A:**
+- **Local Address:** Your server's IP and port (where service is listening)
+- **Peer Address:** Remote client's IP and port (who's connecting)
+
+**Examples:**
+- **LISTEN state:** Local=`0.0.0.0:80`, Peer=`0.0.0.0:*` (accepting any connection)
+- **ESTABLISHED:** Local=`127.0.0.1:80`, Peer=`127.0.0.1:54321` (specific connection)
+
+**Analogy:** Like a phone call - Local Address is your number, Peer Address is who's calling.
+
+### Q: What do Recv-Q and Send-Q mean in `ss` output?
+**A:** Queue sizes showing data flow status:
+
+**For LISTEN sockets:**
+- **Recv-Q:** Usually 0 (no pending data)
+- **Send-Q:** **Backlog queue size** (max pending connections)
+
+**For ESTABLISHED sockets:**
+- **Recv-Q:** Incoming data waiting to be read
+- **Send-Q:** Outgoing data waiting to be sent
+
+**Critical Point:** High Recv-Q values indicate application can't process data fast enough (performance bottleneck).
+
+## SS Command Cheatsheet
+
+### Basic Usage
+```bash
+# Show all connections
+ss
+
+# Show TCP connections only
+ss -t
+
+# Show UDP connections only  
+ss -u
+
+# Show listening sockets only
+ss -l
+
+# Show all (listening + established)
+ss -a
+```
+
+### Combined Options
+```bash
+# Most useful combinations
+ss -tlnp    # TCP listening with process info
+ss -ulnp    # UDP listening with process info  
+ss -tulnp   # All listening sockets with processes
+ss -tnp     # All TCP connections with processes
+
+# Add 'sudo' to see all process details
+sudo ss -tulnp
+```
+
+### Filtering & Advanced Usage
+```bash
+# Show statistics summary
+ss -s
+
+# IPv4 only
+ss -4
+
+# IPv6 only  
+ss -6
+
+# Filter by port (SSH example)
+ss -lnt sport = :22
+
+# Filter by state
+ss state established
+ss state listening
+
+# Combine with grep
+ss -tulnp | grep :80
+```
+
+### Socket States
+Common states you'll see:
+- **LISTEN** - Waiting for incoming connections
+- **ESTABLISHED** - Active connection
+- **TIME_WAIT** - Connection closed, cleanup pending
+- **CLOSE_WAIT** - Remote closed, local still open
+- **SYN_SENT** - Attempting to connect
+
+### Interpreting Output
+```bash
+# Example output explanation
+State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+LISTEN 0      511    0.0.0.0:80        0.0.0.0:*         nginx
+```
+
+**Breakdown:**
+- **State:** LISTEN (waiting for connections)
+- **Recv-Q:** 0 (no pending data)
+- **Send-Q:** 511 (backlog queue size - can handle 511 pending connections)
+- **Local:** 0.0.0.0:80 (nginx listening on all interfaces, port 80)
+- **Peer:** 0.0.0.0:* (accepting from any IP/port)
+- **Process:** nginx (service name)
+
+**Real-world Usage:** Use `sudo ss -tulnp` for comprehensive socket monitoring and troubleshooting network services.
+
 ---
 
 ## First Principles Summary
