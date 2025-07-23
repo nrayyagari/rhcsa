@@ -236,6 +236,64 @@ ps -p PID                   # Specific process by PID
 
 ---
 
+## Cgroup Slices and Resource Management
+
+### Q30: What are cgroup slices in systemd?
+**A:** Slices are hierarchical organizational units that group related services together in the cgroup tree. They create containers for processes to enable resource management and monitoring.
+
+### Q31: What are the three main default slices?
+**A:** 
+- **`-.slice`** - Root slice containing everything
+- **`system.slice`** - All systemd system services
+- **`user.slice`** - All user sessions and processes
+
+### Q32: Do slices reserve dedicated CPU/memory resources?
+**A:** No! By default, all slices have unlimited resources (`infinity`). They are organizational containers, not resource reservations. All processes compete for the same total system resources.
+
+### Q33: How do you determine which slice a process belongs to?
+**A:** The slice is determined by **who started the process**:
+- **System slice**: Processes started by systemd (PID 1) during boot
+- **User slice**: Processes started by users in their sessions
+- Check with `systemctl status service` or `systemd-cgls`
+
+### Q34: Why are nginx and sshd in system.slice even though they run as different users?
+**A:** Because they were **started by systemd** during boot, not by users. The slice is determined by the starter, not the final user ownership. Even if nginx drops privileges to run as user `nginx`, the service itself was started by systemd.
+
+### Q35: How can you view the cgroup hierarchy and resource usage?
+**A:** Key commands:
+- `systemd-cgls` - Show complete cgroup tree
+- `systemd-cgtop` - Real-time resource usage by cgroup
+- `systemctl list-units --type=slice` - List all slices
+- `systemctl show slice-name` - Show slice configuration
+
+### Q36: When would you set resource limits on slices?
+**A:** In production environments for:
+- **Web servers**: Limit memory to prevent OOM
+- **Multi-tenant systems**: Ensure fair resource sharing
+- **Container orchestration**: Resource isolation
+- **Critical services**: Guarantee minimum resources
+
+### Q37: How do you create a custom slice with resource limits?
+**A:** Create a slice unit file:
+```bash
+# /etc/systemd/system/myapp.slice
+[Unit]
+Description=My Application Slice
+
+[Slice]
+CPUQuota=50%
+MemoryLimit=1G
+TasksMax=100
+```
+
+### Q38: What's the relationship between slices and user sessions?
+**A:** Each user login creates a `user-UID.slice` under `user.slice`:
+- SSH sessions go into `session-N.scope`
+- User systemd services go into `user@UID.service`
+- All share the same system resources by default
+
+---
+
 ## References
 
 - [Linux Crash Course - The ps Command](https://www.youtube.com/watch?v=wYwGNgsfN3I) - Comprehensive video tutorial covering ps command fundamentals, options, and practical usage
