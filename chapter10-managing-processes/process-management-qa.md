@@ -15,7 +15,7 @@
 - **Kernel threads**: Names in brackets [kthreadd], zero memory (VSZ=0, RSS=0)
 
 ### Q3: What command shows the process hierarchy?
-**A:** `pstree -p` shows the complete process tree with PIDs. You can also use `ps axo pid,ppid,tty,stat,comm` to see relationships.
+**A:** `pstree -p` shows the complete process tree with PIDs.
 
 ### Q4: Why do kernel threads have zero memory usage?
 **A:** Kernel threads run entirely in kernel space and don't have virtual memory like user space processes. They share the kernel's memory space.
@@ -104,7 +104,6 @@
 ```bash
 ps aux                    # All processes
 ps axo pid,ppid,tty,comm  # Custom format
-pstree -p                 # Process tree
 top / htop                # Real-time view
 systemctl list-units      # systemd services
 ```
@@ -199,6 +198,7 @@ Use `ps aux` to find all processes regardless of shell association.
 - `ps aux --sort=-%cpu` - Sort by CPU usage (highest first)
 - `ps aux --sort=-%mem` - Sort by memory usage (highest first)
 - `ps -ejH` or `ps axjf` - Show process hierarchy/tree
+- `pstree -p` - Process tree with PIDs
 
 ### Q29: What key columns should you understand in `ps aux` output?
 **A:** Critical columns:
