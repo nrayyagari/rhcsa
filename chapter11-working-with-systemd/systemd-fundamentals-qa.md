@@ -482,6 +482,62 @@ systemctl enable backup.timer   # Daily automatic backup
 
 **Enterprise reality**: This separation allows flexible service management - you can run, schedule, monitor, and troubleshoot the execution and timing independently. It's more complex than cron but provides much better control and visibility.
 
+### Q18b: What's the clean way to override systemd unit files?
+**A:** **Use systemd's built-in override mechanism - never edit files in /usr/lib/ directly.**
+
+**Clean approach (RECOMMENDED):**
+```bash
+# 1. Use systemctl edit for partial overrides
+sudo systemctl edit nginx
+
+# 2. systemd opens editor with template:
+### Editing /etc/systemd/system/nginx.service.d/override.conf
+### Anything between here and the comment below will become the new contents of the file
+
+[Unit]
+Description=Production Nginx Web Server
+
+### Lines below this comment will be discarded
+
+# 3. Save and exit - systemd automatically:
+#    - Creates /etc/systemd/system/nginx.service.d/override.conf
+#    - Runs daemon-reload
+#    - Shows you the override location
+```
+
+**Verify the clean merge:**
+```bash
+# Check what's actually loaded (merged config)
+systemctl cat nginx
+
+# See status with your override active
+systemctl status nginx
+● nginx.service - Production Nginx Web Server  # ← Your description
+     Loaded: loaded (/usr/lib/systemd/system/nginx.service; enabled)
+    Drop-In: /etc/systemd/system/nginx.service.d
+             └─override.conf  # ← Clean override location
+```
+
+**What happens behind the scenes:**
+1. **Base config:** `/usr/lib/systemd/system/nginx.service` (untouched)
+2. **Your override:** `/etc/systemd/system/nginx.service.d/override.conf`
+3. **systemd merges:** Base + Override = Effective configuration
+4. **Updates safe:** Package updates won't break your customizations
+
+**Why this is clean:**
+- **Vendor file preserved** - package updates work normally
+- **Override clearly identified** - easy to see what you changed
+- **Easy rollback** - just delete override.conf
+- **Version control friendly** - small, focused override files
+
+**Wrong approach (DON'T DO):**
+```bash
+# BAD - editing vendor files directly
+sudo nano /usr/lib/systemd/system/nginx.service  # Package updates will overwrite!
+```
+
+**Enterprise best practice:** Always use `systemctl edit` for modifications. It's designed for exactly this purpose and keeps your changes separate and safe.
+
 ---
 
 ## Unit File Creation and Editing
