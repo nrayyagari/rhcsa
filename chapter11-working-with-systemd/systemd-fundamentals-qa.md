@@ -425,8 +425,339 @@ systemctl list-timers  # Verify
 
 ---
 
+## Unit File Creation and Editing
+
+### Q19: What's the proper way to edit or override existing unit files?
+**A:** **Safe editing methods:**
+
+**For partial overrides (recommended):**
+```bash
+sudo systemctl edit nginx
+# Creates /etc/systemd/system/nginx.service.d/override.conf
+# Add only the sections you want to override
+```
+
+**For complete replacement:**
+```bash
+sudo systemctl edit --full nginx  
+# Creates full copy in /etc/systemd/system/nginx.service
+```
+
+**After any edits:**
+```bash
+sudo systemctl daemon-reload  # Reload systemd configuration
+sudo systemctl restart nginx  # Apply changes
+```
+
+### Q20: How do you create a custom systemd service from scratch?
+**A:** **Create custom service workflow:**
+
+**1. Create service file:**
+```bash
+sudo nano /etc/systemd/system/myapp.service
+```
+
+**2. Basic service structure:**
+```ini
+[Unit]
+Description=My Custom Application
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/myapp
+Restart=always
+User=myapp
+Group=myapp
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**3. Enable and start:**
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now myapp
+sudo systemctl status myapp
+```
+
+### Q21: What are the different service types and when to use them?
+**A:** **Service Types:**
+
+- **`simple`** (default) - Process runs in foreground, doesn't fork
+- **`forking`** - Process forks and parent exits (traditional daemons like nginx)
+- **`oneshot`** - Process runs once and exits (scripts, backups)
+- **`notify`** - Process sends notification when ready
+- **`idle`** - Waits until other services finish starting
+
+**Most common:** `simple` for modern applications, `forking` for traditional daemons, `oneshot` for scripts.
+
+---
+
+## systemd Command Cheatsheet
+
+### Q22: What are the essential systemd commands organized by function?
+**A:** **Complete systemd command reference:**
+
+**Service Management:**
+```bash
+# Basic operations
+systemctl start nginx
+systemctl stop nginx
+systemctl restart nginx
+systemctl reload nginx
+systemctl status nginx
+
+# Boot behavior
+systemctl enable nginx        # Start at boot
+systemctl disable nginx       # Don't start at boot
+systemctl enable --now nginx  # Enable + start
+systemctl is-enabled nginx    # Check if enabled
+systemctl is-active nginx     # Check if running
+```
+
+**System Information:**
+```bash
+# List units
+systemctl list-units                    # All active units
+systemctl list-units --type=service     # Services only
+systemctl list-units --failed           # Failed units
+systemctl list-unit-files               # All unit files
+systemctl list-dependencies nginx       # Service dependencies
+
+# Unit file locations
+systemctl cat nginx                      # Show effective unit file
+systemctl show nginx                     # Show all properties
+```
+
+**Logs and Monitoring:**
+```bash
+# Service logs
+journalctl -u nginx                      # Service-specific logs
+journalctl -u nginx -f                   # Follow logs real-time
+journalctl -u nginx --since "1 hour ago" # Recent logs
+journalctl --failed                      # Failed service logs
+
+# System analysis
+systemd-analyze                          # Boot time summary
+systemd-analyze blame                    # Services by boot time
+systemd-analyze critical-chain           # Critical path analysis
+systemd-analyze plot > boot.svg          # Boot chart visualization
+```
+
+**Configuration Management:**
+```bash
+# Safe editing
+systemctl edit nginx                     # Create override
+systemctl edit --full nginx             # Full replacement
+systemctl daemon-reload                  # Reload configs
+systemctl reset-failed                   # Clear failed status
+```
+
+### Q23: What's the nginx installation and management workflow on RHEL-based systems?
+**A:** **Complete nginx + systemd workflow:**
+
+**Installation:**
+```bash
+sudo dnf install nginx
+```
+
+**Service Management:**
+| Task                   | Command                                    |
+|------------------------|--------------------------------------------|
+| Install nginx          | sudo dnf install nginx                     |
+| Start nginx            | sudo systemctl start nginx                 |
+| Stop nginx             | sudo systemctl stop nginx                  |
+| Restart nginx          | sudo systemctl restart nginx               |
+| Reload nginx config    | sudo systemctl reload nginx                |
+| Check nginx status     | sudo systemctl status nginx                |
+| Enable nginx at boot   | sudo systemctl enable nginx                |
+| Disable nginx at boot  | sudo systemctl disable nginx               |
+| Edit (override) config | sudo systemctl edit nginx                  |
+| Full override          | sudo systemctl edit --full nginx           |
+| Reload systemd files   | sudo systemctl daemon-reload               |
+| View nginx logs        | sudo journalctl -u nginx                   |
+
+**Configuration workflow:**
+```bash
+# 1. Edit nginx config
+sudo nano /etc/nginx/nginx.conf
+
+# 2. Test configuration
+sudo nginx -t
+
+# 3. Reload service
+sudo systemctl reload nginx
+
+# 4. Verify
+sudo systemctl status nginx
+```
+
+---
+
+## Advanced systemd Features
+
+### Q24: How do you use systemd timers to replace cron jobs?
+**A:** **Timer units provide better scheduling than cron:**
+
+**Advantages over cron:**
+- **Integrated logging** - logs go to journald
+- **Service dependencies** - can wait for other services
+- **Resource management** - cgroup integration
+- **Flexible scheduling** - more options than cron
+- **Systemd integration** - unified management
+
+**Timer example replacing cron:**
+
+**Old cron:**
+```bash
+# Run backup daily at 2 AM
+0 2 * * * root /usr/local/bin/backup.sh
+```
+
+**New systemd timer:**
+
+**backup.service:**
+```ini
+[Unit]
+Description=Daily backup job
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backup.sh
+User=root
+```
+
+**backup.timer:**
+```ini
+[Unit]
+Description=Daily backup timer
+Requires=backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+**Management:**
+```bash
+sudo systemctl enable --now backup.timer
+systemctl list-timers                   # View all timers
+journalctl -u backup.service             # Check backup logs
+```
+
+### Q25: What are the systemd file hierarchy priorities and override mechanisms?
+**A:** **systemd loads unit files in priority order:**
+
+**Priority Order (highest to lowest):**
+1. **`/etc/systemd/system/`** - Local admin configs (highest priority)
+2. **`/run/systemd/system/`** - Runtime units (rarely used manually)  
+3. **`/lib/systemd/system/`** - Package defaults (lowest priority)
+
+**Override mechanisms:**
+- **Complete override:** Place full unit file in `/etc/systemd/system/`
+- **Drop-in override:** Use `systemctl edit` to create override snippets
+- **Runtime override:** Temporary changes in `/run` (lost on reboot)
+
+**Best practices:**
+- Never edit files in `/lib/systemd/system/` - package updates will overwrite
+- Use `systemctl edit` for small changes - creates organized overrides
+- Place custom services in `/etc/systemd/system/`
+- Always run `systemctl daemon-reload` after manual file changes
+
+---
+
+## Production Troubleshooting
+
+### Q26: What's a systematic approach to debugging systemd service failures?
+**A:** **Step-by-step troubleshooting workflow:**
+
+**1. Check service status:**
+```bash
+systemctl status nginx
+# Look for: Active status, recent logs, exit codes
+```
+
+**2. Examine detailed logs:**
+```bash
+journalctl -u nginx -xe
+# -x: Show explanatory help text
+# -e: Jump to end of logs
+```
+
+**3. Check configuration syntax:**
+```bash
+nginx -t  # nginx-specific
+# Or application-specific config test
+```
+
+**4. Verify dependencies:**
+```bash
+systemctl list-dependencies nginx
+systemctl status network.target
+```
+
+**5. Check resource constraints:**
+```bash
+systemctl show nginx | grep -E "(CPUQuota|MemoryLimit|TasksMax)"
+```
+
+**6. Test manual startup:**
+```bash
+sudo -u nginx /usr/sbin/nginx -t
+# Run as service user to catch permission issues
+```
+
+**7. Common failure patterns:**
+- **Permission errors:** Check file ownership and SELinux contexts
+- **Port conflicts:** `ss -tlnp | grep :80`
+- **Missing dependencies:** Check `After=` and `Requires=` in unit file
+- **Resource limits:** Check systemd resource constraints
+
+---
+
+## systemd vs Traditional Init
+
+### Q27: How does systemd improve upon traditional SysV init?
+**A:** **Key improvements systemd brought:**
+
+**Traditional SysV problems:**
+- **Sequential startup** - services start one by one (slow boots)
+- **No dependency management** - manual script ordering
+- **Limited process monitoring** - processes can die unnoticed
+- **Inconsistent logging** - scattered log files
+- **Complex scripting** - bash scripts for every service
+
+**systemd solutions:**
+- **Parallel startup** - services start simultaneously when dependencies met
+- **Automatic dependency resolution** - systemd figures out order
+- **Process supervision** - automatic restart on failure
+- **Centralized logging** - journald collects everything
+- **Declarative configuration** - simple ini-style files
+
+**Boot time comparison:**
+- **SysV:** 45-60 seconds typical boot time
+- **systemd:** 15-30 seconds with same services
+
+**Management comparison:**
+```bash
+# SysV way
+/etc/init.d/nginx start
+chkconfig nginx on
+
+# systemd way  
+systemctl start nginx
+systemctl enable nginx
+```
+
+---
+
 ## References
 
+- [Systemd Explained: The Ultimate Deep Dive for Linux Users](https://www.youtube.com/watch?v=Kzpm-rGAXos) - Comprehensive video tutorial
 - systemd official documentation: systemd.io
 - Red Hat systemd documentation
 - nginx systemd integration guide
